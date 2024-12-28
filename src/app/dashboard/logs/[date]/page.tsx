@@ -5,6 +5,8 @@ import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Brain, Battery, Target, Zap } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import Link from 'next/link'
 
 const METRICS = [
   { id: 'mood', label: 'Mood', color: '#2563eb', icon: Brain },
@@ -19,10 +21,35 @@ interface Props {
   }
 }
 
+interface StackItem {
+  id: string
+  name: string
+  type: string
+  dosage?: string
+}
+
+interface Stack {
+  id: string
+  name: string
+  stack_items: StackItem[]
+}
+
+interface Log {
+  id: string
+  date: string
+  mood: number
+  energy: number
+  focus: number
+  stress: number
+  notes?: string
+  items_taken: string[]
+  stacks: Stack
+  [key: string]: any // Allow string indexing for metrics
+}
+
 export default async function LogDetailPage({ params }: Props) {
   const supabase = await createClient()
   
-  // Get session using cookies
   const {
     data: { session },
   } = await supabase.auth.getSession()
@@ -31,13 +58,30 @@ export default async function LogDetailPage({ params }: Props) {
     redirect('/auth/signin')
   }
 
-  // Get existing log for this date
+  const date = new Date(params.date).toISOString().split('T')[0]
+
   const { data: log } = await supabase
     .from('daily_logs')
-    .select('*')
+    .select(`
+      *,
+      stacks (
+        id,
+        name,
+        stack_items (
+          id,
+          name,
+          type,
+          dosage
+        )
+      )
+    `)
     .eq('user_id', session.user.id)
-    .eq('date', params.date)
-    .single()
+    .eq('date', date)
+    .single() as { data: Log | null }
+
+  if (!log) {
+    redirect('/dashboard/logs')
+  }
 
   return (
     <div className="max-w-2xl mx-auto space-y-8">
@@ -50,56 +94,83 @@ export default async function LogDetailPage({ params }: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle>How are you feeling today?</CardTitle>
-          <CardDescription>
-            Rate your mood, energy, focus, and stress levels
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>How are you feeling today?</CardTitle>
+              <CardDescription>
+                Rate your mood, energy, focus, and stress levels
+              </CardDescription>
+            </div>
+            {log.stacks && (
+              <Badge variant="secondary">
+                {log.stacks.name}
+              </Badge>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          {METRICS.map((metric) => {
-            const Icon = metric.icon
-            const value = log?.metrics?.[metric.id] || 5
+          <div className="grid gap-6">
+            {METRICS.map((metric) => {
+              const Icon = metric.icon
+              const value = log[metric.id] as number || 5
 
-            return (
-              <div key={metric.id} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="flex items-center gap-2 text-sm font-medium">
-                    <Icon className="h-4 w-4" style={{ color: metric.color }} />
-                    {metric.label}
-                  </label>
-                  <span className="text-sm text-muted-foreground">
-                    {value}/10
-                  </span>
+              return (
+                <div key={metric.id} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Icon className="h-4 w-4" style={{ color: metric.color }} />
+                      {metric.label}
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      {value}/10
+                    </span>
+                  </div>
+                  <Slider
+                    defaultValue={[value]}
+                    max={10}
+                    step={1}
+                    className="[&_[role=slider]]:h-4 [&_[role=slider]]:w-4"
+                    style={{
+                      '--slider-color': metric.color,
+                    } as any}
+                    disabled
+                  />
                 </div>
-                <Slider
-                  defaultValue={[value]}
-                  max={10}
-                  step={1}
-                  className="[&_[role=slider]]:h-4 [&_[role=slider]]:w-4"
-                  style={{
-                    '--slider-color': metric.color,
-                  } as any}
-                  disabled
-                />
-              </div>
-            )
-          })}
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Daily Summary</label>
-            <Textarea
-              placeholder="How was your day? What worked well? What could be improved?"
-              className="min-h-[100px]"
-              defaultValue={log?.summary || ''}
-              disabled
-            />
+              )
+            })}
           </div>
+
+          {log.notes && (
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Daily Summary</div>
+              <div className="text-sm text-muted-foreground whitespace-pre-wrap">
+                {log.notes}
+              </div>
+            </div>
+          )}
+
+          {log.items_taken?.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-sm font-medium">Items Taken</div>
+              <div className="flex flex-wrap gap-2">
+                {log.items_taken.map((itemId: string) => {
+                  const item = log.stacks?.stack_items?.find(i => i.id === itemId)
+                  if (!item) return null
+                  return (
+                    <Badge key={itemId} variant="outline">
+                      {item.name} {item.dosage && `(${item.dosage})`}
+                    </Badge>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       <div className="flex justify-end">
         <Button asChild>
-          <a href="/dashboard/logs/new">Update Check-in</a>
+          <Link href="/dashboard/logs/new">Update Check-in</Link>
         </Button>
       </div>
     </div>

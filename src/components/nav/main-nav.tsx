@@ -7,10 +7,11 @@ import { Compass, LayoutGrid, LineChart, ListTodo, Menu, X, Calendar, Home, Sear
 import { useState } from 'react'
 import { SignInButton } from '@/components/auth/SignInButton'
 import { cn } from "@/lib/utils"
+import { DailyCheckInButton } from '@/components/daily-check-in-button'
 
 const navigation = {
   public: [
-    { name: 'Discover', href: '/discover', icon: Compass },
+    { name: 'Discover', href: '/dashboard/discover', icon: Compass },
     { name: 'About', href: '/about', icon: LayoutGrid },
   ],
   authenticated: [
@@ -62,16 +63,7 @@ export function MainNav() {
 
           {/* Desktop Auth/User Menu */}
           <div className="hidden md:flex items-center space-x-4">
-            <Link
-              href={`/dashboard/logs/${today}`}
-              className={cn(
-                "flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-full transition-colors",
-                "shadow-sm hover:shadow-md"
-              )}
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              <span className="font-medium">Daily Check-in</span>
-            </Link>
+            <DailyCheckInButton />
             <Link
               href="/dashboard/stacks/new"
               className={cn(
@@ -122,14 +114,7 @@ export function MainNav() {
               })}
               <div className="pt-4 border-t">
                 <div className="flex flex-col space-y-4 mb-4">
-                  <Link
-                    href={`/dashboard/logs/${today}`}
-                    className="flex items-center gap-2 text-sm font-medium text-green-600"
-                    onClick={() => setIsOpen(false)}
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                    Daily Check-in
-                  </Link>
+                  <DailyCheckInButton />
                   <Link
                     href="/dashboard/stacks/new"
                     className="flex items-center gap-2 text-sm font-medium text-primary"

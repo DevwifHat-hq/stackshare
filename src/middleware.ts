@@ -36,18 +36,28 @@ export async function middleware(request: NextRequest) {
   const { data: { session } } = await supabase.auth.getSession()
   const pathname = request.nextUrl.pathname
 
-  // Allow all auth-related routes
-  if (pathname.startsWith('/auth')) {
+  console.log('Middleware - Path:', pathname)
+  console.log('Middleware - Session:', !!session)
+
+  // Allow auth routes and public pages
+  if (
+    pathname.startsWith('/auth') || 
+    pathname === '/dashboard/discover' ||
+    pathname.match(/^\/dashboard\/stacks\/[^/]+$/) // Allow individual stack views
+  ) {
+    console.log('Middleware - Allowing access to:', pathname)
     return response
   }
 
   // If not authenticated and trying to access a protected route
   if (!session && pathname !== '/') {
-    return NextResponse.redirect(new URL('/', request.url))
+    console.log('Middleware - Redirecting unauthenticated user from:', pathname, 'to: /dashboard/discover')
+    return NextResponse.redirect(new URL('/dashboard/discover', request.url))
   }
 
   // If authenticated and trying to access the home page
   if (session && pathname === '/') {
+    console.log('Middleware - Redirecting authenticated user to dashboard')
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 

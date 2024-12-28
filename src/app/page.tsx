@@ -2,69 +2,73 @@ import { createClient } from '@/lib/supabase/server'
 import Link from 'next/link'
 import { ArrowRight, TrendingUp, Users, Star } from 'lucide-react'
 
+type Stack = {
+  id: string
+  name: string
+  description: string
+  created_at: string
+  views: number
+  likes: number
+  user_profiles: {
+    full_name: string
+    avatar_url: string | null
+  } | null
+  stack_categories: Array<{
+    categories: {
+      id: string
+      name: string
+      slug: string
+    } | null
+  }> | null
+}
+
 async function getFeaturedContent() {
-  const supabase = createClient()
+  const supabase = await createClient()
 
   const { data: categories } = await supabase
     .from('categories')
     .select('*')
     .order('name')
 
-  const { data: popularStacks } = await supabase
+  const { data: featuredStacks } = await supabase
     .from('stacks')
     .select(`
       id,
       name,
       description,
-      purpose,
+      created_at,
       views,
       likes,
-      user_id,
-      categories (
-        name,
-        slug
-      ),
       user_profiles (
         full_name,
         avatar_url
-      )
-    `)
-    .eq('is_public', true)
-    .order('likes', { ascending: false })
-    .limit(6)
-
-  const { data: recentStacks } = await supabase
-    .from('stacks')
-    .select(`
-      id,
-      name,
-      description,
-      purpose,
-      views,
-      likes,
-      user_id,
-      categories (
-        name,
-        slug
       ),
-      user_profiles (
-        full_name,
-        avatar_url
+      stack_categories (
+        categories (
+          id,
+          name,
+          slug
+        )
       )
     `)
     .eq('is_public', true)
     .order('created_at', { ascending: false })
-    .limit(6)
+    .limit(3)
 
   return {
-    categories,
-    popularStacks,
-    recentStacks,
+    categories: categories || [],
+    featuredStacks: (featuredStacks as any[] || []).map(stack => ({
+      ...stack,
+      user_profiles: Array.isArray(stack.user_profiles) ? stack.user_profiles[0] : null,
+      stack_categories: stack.stack_categories?.map((sc: any) => ({
+        categories: sc.categories
+      })) || null
+    })) as Stack[]
   }
 }
 
 export default async function HomePage() {
-  const { categories, popularStacks, recentStacks } = await getFeaturedContent()
+  const { categories, featuredStacks } = await getFeaturedContent()
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -73,7 +77,7 @@ export default async function HomePage() {
         <div className="mx-auto max-w-7xl px-6 pb-24 pt-10 sm:pb-32 lg:flex lg:px-8 lg:py-40">
           <div className="mx-auto max-w-2xl lg:mx-0 lg:max-w-xl lg:flex-shrink-0 lg:pt-8">
             <div className="mt-24 sm:mt-32 lg:mt-16">
-              <a href="/auth/login" className="inline-flex space-x-6">
+              <Link href="/dashboard/discover" className="inline-flex space-x-6">
                 <span className="rounded-full bg-indigo-600/10 px-3 py-1 text-sm font-semibold leading-6 text-indigo-600 ring-1 ring-inset ring-indigo-600/10">
                   What's new
                 </span>
@@ -81,7 +85,7 @@ export default async function HomePage() {
                   <span>Just shipped v1.0</span>
                   <ArrowRight className="h-4 w-4" />
                 </span>
-              </a>
+              </Link>
             </div>
             <h1 className="mt-10 text-4xl font-bold tracking-tight text-gray-900 sm:text-6xl">
               Discover and Share Biohacking Stacks
@@ -90,15 +94,18 @@ export default async function HomePage() {
               Explore curated collections of supplements, routines, and practices. Learn from the community and optimize your performance.
             </p>
             <div className="mt-10 flex items-center gap-x-6">
-              <a
-                href="/auth/login"
+              <Link
+                href="/dashboard/discover"
                 className="rounded-md bg-indigo-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
               >
                 Get started
-              </a>
-              <a href="#browse" className="text-sm font-semibold leading-6 text-gray-900">
+              </Link>
+              <Link 
+                href="/dashboard/discover" 
+                className="text-sm font-semibold leading-6 text-gray-900 hover:text-gray-600 transition-colors"
+              >
                 Browse stacks <span aria-hidden="true">→</span>
-              </a>
+              </Link>
             </div>
           </div>
           <div className="mx-auto mt-16 flex max-w-2xl sm:mt-24 lg:ml-10 lg:mr-0 lg:mt-0 lg:max-w-none lg:flex-none xl:ml-32">
@@ -141,96 +148,34 @@ export default async function HomePage() {
         </div>
       </div>
 
-      {/* Popular Stacks Section */}
+      {/* Featured Stacks Section */}
       <div className="bg-white py-24 sm:py-32">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-2xl lg:mx-0">
-            <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Popular Stacks</h2>
+            <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Featured Stacks</h2>
             <p className="mt-2 text-lg leading-8 text-gray-600">
-              Discover the most liked and tested stacks from our community
+              Discover the latest and most popular stacks from our community
             </p>
           </div>
           <div className="mx-auto mt-10 grid max-w-2xl grid-cols-1 gap-x-8 gap-y-16 border-t border-gray-200 pt-10 sm:mt-16 sm:pt-16 lg:mx-0 lg:max-w-none lg:grid-cols-3">
-            {popularStacks?.map((stack) => (
+            {featuredStacks?.map((stack) => (
               <article key={stack.id} className="flex max-w-xl flex-col items-start justify-between">
                 <div className="flex items-center gap-x-4 text-xs">
                   <time dateTime={stack.created_at} className="text-gray-500">
                     {new Date(stack.created_at).toLocaleDateString()}
                   </time>
-                  <Link
-                    href={`/categories/${stack.categories?.slug}`}
-                    className="relative z-10 rounded-full bg-gray-50 px-3 py-1.5 font-medium text-gray-600 hover:bg-gray-100"
-                  >
-                    {stack.categories?.name}
-                  </Link>
-                </div>
-                <div className="group relative">
-                  <h3 className="mt-3 text-lg font-semibold leading-6 text-gray-900 group-hover:text-gray-600">
-                    <Link href={`/stacks/${stack.id}`}>
-                      <span className="absolute inset-0" />
-                      {stack.name}
+                  {stack.stack_categories?.[0]?.categories && (
+                    <Link
+                      href={`/categories/${stack.stack_categories[0].categories.slug}`}
+                      className="relative z-10 rounded-full bg-gray-50 px-3 py-1.5 font-medium text-gray-600 hover:bg-gray-100"
+                    >
+                      {stack.stack_categories[0].categories.name}
                     </Link>
-                  </h3>
-                  <p className="mt-5 line-clamp-3 text-sm leading-6 text-gray-600">{stack.description}</p>
-                </div>
-                <div className="relative mt-8 flex items-center gap-x-4">
-                  {stack.user_profiles?.avatar_url ? (
-                    <img src={stack.user_profiles.avatar_url} alt="" className="h-10 w-10 rounded-full bg-gray-50" />
-                  ) : (
-                    <div className="h-10 w-10 rounded-full bg-gray-50 flex items-center justify-center">
-                      <Users className="h-6 w-6 text-gray-400" />
-                    </div>
                   )}
-                  <div className="text-sm leading-6">
-                    <p className="font-semibold text-gray-900">
-                      <span className="absolute inset-0" />
-                      {stack.user_profiles?.full_name || 'Anonymous'}
-                    </p>
-                  </div>
-                  <div className="flex-1" />
-                  <div className="flex items-center gap-x-4 text-gray-500">
-                    <div className="flex items-center gap-x-1">
-                      <TrendingUp className="h-4 w-4" />
-                      <span>{stack.views}</span>
-                    </div>
-                    <div className="flex items-center gap-x-1">
-                      <Star className="h-4 w-4" />
-                      <span>{stack.likes}</span>
-                    </div>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Recent Stacks Section */}
-      <div className="bg-gray-50 py-24 sm:py-32">
-        <div className="mx-auto max-w-7xl px-6 lg:px-8">
-          <div className="mx-auto max-w-2xl lg:mx-0">
-            <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Recently Added</h2>
-            <p className="mt-2 text-lg leading-8 text-gray-600">
-              Check out the latest stacks shared by our community
-            </p>
-          </div>
-          <div className="mx-auto mt-10 grid max-w-2xl grid-cols-1 gap-x-8 gap-y-16 border-t border-gray-200 pt-10 sm:mt-16 sm:pt-16 lg:mx-0 lg:max-w-none lg:grid-cols-3">
-            {recentStacks?.map((stack) => (
-              <article key={stack.id} className="flex max-w-xl flex-col items-start justify-between">
-                <div className="flex items-center gap-x-4 text-xs">
-                  <time dateTime={stack.created_at} className="text-gray-500">
-                    {new Date(stack.created_at).toLocaleDateString()}
-                  </time>
-                  <Link
-                    href={`/categories/${stack.categories?.slug}`}
-                    className="relative z-10 rounded-full bg-gray-50 px-3 py-1.5 font-medium text-gray-600 hover:bg-gray-100"
-                  >
-                    {stack.categories?.name}
-                  </Link>
                 </div>
                 <div className="group relative">
                   <h3 className="mt-3 text-lg font-semibold leading-6 text-gray-900 group-hover:text-gray-600">
-                    <Link href={`/stacks/${stack.id}`}>
+                    <Link href={`/dashboard/stacks/${stack.id}`}>
                       <span className="absolute inset-0" />
                       {stack.name}
                     </Link>

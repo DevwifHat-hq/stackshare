@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Slider } from '@/components/ui/slider'
-import { Brain, Battery, Focus, Gauge, Moon } from 'lucide-react'
+import { Brain, Battery, Focus, Gauge, Moon, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface DailyLog {
@@ -19,62 +19,48 @@ interface DailyLog {
   notes: string
 }
 
+const DEFAULT_LOG: DailyLog = {
+  mood: 5,
+  energy: 5,
+  focus: 5,
+  stress: 5,
+  sleep_quality: 5,
+  notes: ''
+}
+
 export default function JournalPage() {
   const router = useRouter()
+  const [log, setLog] = useState<DailyLog>(DEFAULT_LOG)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [log, setLog] = useState<DailyLog>({
-    mood: 5,
-    energy: 5,
-    focus: 5,
-    stress: 5,
-    sleep_quality: 5,
-    notes: ''
-  })
 
   useEffect(() => {
-    async function fetchTodaysLog() {
-      try {
-        const supabase = createClient()
-        const { data: { session } } = await supabase.auth.getSession()
+    async function checkExistingLog() {
+      setLoading(true)
+      const supabase = createClient()
+      const today = new Date().toISOString().split('T')[0]
 
-        if (!session) {
-          router.push('/auth/signin')
-          return
-        }
+      const { data: existingLog } = await supabase
+        .from('daily_logs')
+        .select('*')
+        .eq('date', today)
+        .single()
 
-        const today = new Date().toISOString().split('T')[0]
-        const { data: todaysLog, error } = await supabase
-          .from('daily_logs')
-          .select('*')
-          .eq('user_id', session.user.id)
-          .eq('date', today)
-          .single()
-
-        if (error) {
-          console.error('Error fetching log:', error)
-          return
-        }
-
-        if (todaysLog) {
-          setLog({
-            mood: todaysLog.mood,
-            energy: todaysLog.energy,
-            focus: todaysLog.focus,
-            stress: todaysLog.stress,
-            sleep_quality: todaysLog.sleep_quality,
-            notes: todaysLog.notes || ''
-          })
-        }
-      } catch (error) {
-        console.error('Error in fetchTodaysLog:', error)
-      } finally {
-        setLoading(false)
+      if (existingLog) {
+        setLog({
+          mood: existingLog.metrics?.mood || 5,
+          energy: existingLog.metrics?.energy || 5,
+          focus: existingLog.metrics?.focus || 5,
+          stress: existingLog.metrics?.stress || 5,
+          sleep_quality: existingLog.metrics?.sleep_quality || 5,
+          notes: existingLog.summary || ''
+        })
       }
+      setLoading(false)
     }
 
-    fetchTodaysLog()
-  }, [router])
+    checkExistingLog()
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -82,77 +68,48 @@ export default function JournalPage() {
 
     try {
       const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-
-      if (!session) {
-        router.push('/auth/signin')
-        return
-      }
-
       const today = new Date().toISOString().split('T')[0]
-      const timestamp = new Date().toISOString()
 
-      // First, check if a log exists for today
+      // Check for existing log first
       const { data: existingLog } = await supabase
         .from('daily_logs')
         .select('id')
-        .eq('user_id', session.user.id)
         .eq('date', today)
         .single()
 
-      const logData = {
-        user_id: session.user.id,
-        date: today,
+      const metrics = {
         mood: log.mood,
         energy: log.energy,
         focus: log.focus,
         stress: log.stress,
-        sleep_quality: log.sleep_quality,
-        notes: log.notes || '',
-        action: 'log_metrics',
-        metadata: {
-          mood_score: log.mood,
-          energy_score: log.energy,
-          focus_score: log.focus,
-          stress_score: log.stress,
-          sleep_score: log.sleep_quality,
-          summary: log.notes
-        },
-        created_at: timestamp,
-        updated_at: timestamp
+        sleep_quality: log.sleep_quality
       }
 
-      let error
       if (existingLog) {
         // Update existing log
-        const result = await supabase
+        await supabase
           .from('daily_logs')
-          .update(logData)
+          .update({
+            metrics,
+            summary: log.notes,
+            updated_at: new Date().toISOString()
+          })
           .eq('id', existingLog.id)
-        error = result.error
       } else {
-        // Insert new log
-        const result = await supabase
+        // Create new log
+        await supabase
           .from('daily_logs')
-          .insert([logData])
-        error = result.error
+          .insert({
+            date: today,
+            metrics,
+            summary: log.notes
+          })
       }
 
-      if (error) {
-        console.error('Database error:', error)
-        throw error
-      }
-
-      toast.success('Daily log saved successfully!')
-      router.refresh()
+      toast.success('Daily log saved successfully')
       router.push('/dashboard')
-    } catch (error: any) {
-      console.error('Error saving log:', {
-        message: error?.message,
-        details: error?.details,
-        hint: error?.hint,
-        code: error?.code
-      })
+    } catch (error) {
+      console.error('Error saving log:', error)
       toast.error('Failed to save log. Please try again.')
     } finally {
       setSaving(false)
@@ -161,8 +118,8 @@ export default function JournalPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     )
   }
@@ -246,7 +203,7 @@ export default function JournalPage() {
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <label className="text-sm font-medium">Stress</label>
-                  <div className="text-xs text-muted-foreground">How stressed are you feeling?</div>
+                  <div className="text-xs text-muted-foreground">How stressed do you feel?</div>
                 </div>
                 <div className="flex items-center">
                   <Gauge className="w-4 h-4 mr-2 text-muted-foreground" />
